@@ -10,3 +10,11 @@ jobs:
           node-version: 22
       # Uses each example's committed diagram.svg, so no network or Kymo needed.
       - run: node scripts/check.mjs
+
+      - run: python3 scripts/package-vscode.py
+      - run: node --test tests/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-explainer-vsix
+          path: vscode/output/motion-explainer.vsix
+          if-no-files-found: error

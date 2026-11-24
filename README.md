@@ -1,6 +1,19 @@
-# motion-explainer
+# Motion Explainer for VS Code
 
 **Ask your coding agent how something works, and watch it run.**
+
+This fork of [bilaltahseen/motion-explainer](https://github.com/bilaltahseen/motion-explainer)
+adds a native VS Code player, automatic walkthrough updates, browser/system
+voiceover, and paused canvas navigation. The upstream agent skill and MIT
+attribution are preserved. The original Motion Explainer was created by
+**[Bilal Tahseen](https://github.com/bilaltahseen)**; credit belongs to him and
+the [upstream contributors](https://github.com/bilaltahseen/motion-explainer/graphs/contributors)
+for the original skill, player, examples and documentation. See [credits](AUTHORS.md).
+
+**[Install in VS Code, enable voiceover, and connect your coding agent →](INSTALL.md)**
+Voiceover is included in the Motion Explainer extension; no separate speech
+extension or paid speech API is required. This is a sideloaded VSIX, not a
+Marketplace installation.
 
 <p align="center">
   <img src="docs/how-it-works.svg" alt="Animated diagram: you ask a coding agent a question; it reads your codebase, writes diagram.kymo and explainer.json; build.mjs renders the diagram with Kymo and produces an animated, offline index.html" width="860">
@@ -21,16 +34,15 @@ Diagrams are laid out and drawn by [Kymo](https://github.com/kymostudio/kymostud
 
 *The player, built from the [`order-queue`](skills/motion-explainer/examples/order-queue) example. This is step 4 of the "payment keeps failing" flow.*
 
-## Install
+## Install the agent skill without the extension
 
 You need Node 18 or newer. There are no npm dependencies.
 
 ```bash
-git clone https://github.com/bilaltahseen/motion-explainer
-node motion-explainer/skills/motion-explainer/scripts/install.mjs
+node skills/motion-explainer/scripts/install.mjs
 ```
 
-The installer detects which agents you have and copies the skill into each one's skills folder:
+Run that command from a checkout of this fork. The installer detects which agents you have and copies the skill into each one's skills folder:
 
 | Agent | Location |
 |---|---|
@@ -96,3 +108,36 @@ See [AGENTS.md](AGENTS.md) for the repo layout, conventions and the Kymo quirks 
 ## License
 
 MIT. Diagrams are rendered by [Kymo](https://github.com/kymostudio/kymostudio) (Apache-2.0).
+
+## VS Code extension
+
+See [installation and setup](INSTALL.md) for the release download or a source
+build, and [the extension guide](vscode/README.md) for behavior and settings.
+
+```bash
+python3 scripts/package-vscode.py
+code --install-extension vscode/output/motion-explainer.vsix --force
+```
+
+Reload once, then run **Motion Explainer: Open Sample**. The native player opens
+newly generated `explainers/**/index.html` files, rebuilds source changes, and
+opens code references in the workspace's extension host. The extension defaults
+to offline rendering and needs no MCP service. To update this workspace's skill:
+
+```bash
+node skills/motion-explainer/scripts/install.mjs --project /absolute/workspace
+```
+
+### Voiceover
+
+The player narrates steps using browser/OS speech voices, enabled by default.
+Voice and on/off preferences persist. Autoplay waits for speech and animation;
+pause/resume freezes the current step, and navigation cancels old narration.
+The voice selector lists available system voices, marking online voices.
+Unavailable speech falls back to reading pace. No speech API key is required.
+
+Optional browser verification uses a separately installed Playwright module:
+
+```bash
+MOTION_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node tests/voice-browser.mjs
+```

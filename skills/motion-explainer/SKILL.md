@@ -30,18 +30,26 @@ You turn "how does X work?" into a short animated walkthrough. You read the code
 
 5. **Build:**
    ```bash
-   node "$SKILL_DIR/scripts/build.mjs" explainers/<slug> --open
+   node "$SKILL_DIR/scripts/build.mjs" explainers/<slug> --offline
    ```
    - On `ERROR` lines, fix the spec or diagram and rerun.
    - Fix every `warn` line you reasonably can: missing edges, wrong file paths, Kymo quirks. A warning banner in the player means unfinished work.
    - `icon fetch failed` means that icon isn't on Kymo's CDN. Pick another and rebuild.
    - The SVG is cached by source hash, so editing only `explainer.json` rebuilds instantly and offline.
 
+When the Motion Explainer VS Code extension is installed, it watches
+   `explainers/**/index.html` and opens the native player automatically. Build
+   without `--open` to avoid launching a second browser. Every substantive
+   follow-up should update and rebuild the current explainer, or create a new
+   slug when the components or mechanism change; an already-open player does
+   not answer a new question. Use built-in glyphs for offline rendering. Initial
+   local renderer setup may download Kymo from npm, but diagram data stays local.
+
 6. **Report back** in a few lines:
    - the path to `index.html`
    - the flows and what each shows
    - the keyboard keys (← → step, space play, 1–9 flows, click a node)
-   - a one-line privacy note: "the diagram source (component names and edge labels, no code) was sent to render.kymo.studio to lay it out; set `MOTION_EXPLAINER_OFFLINE=1` to render locally with built-in icons only."
+   - a one-line privacy note reflecting what actually happened: cached diagram, local rendering, or diagram labels sent to Kymo when online rendering was explicitly chosen.
    Don't paste the JSON back to the user.
 
 ## Updating an existing explainer

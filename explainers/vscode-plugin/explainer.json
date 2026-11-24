@@ -1,0 +1,198 @@
+{
+  "title": "How the Motion Explainer VS Code plugin works",
+  "summary": "The agent authors a walkthrough. File events open or rebuild its offline player in a native VS Code tab, without an MCP service.",
+  "root": "../..",
+  "nodes": {
+    "watcher": {
+      "desc": "Watches generated index.html files and source edits. The 450 ms debounce groups related saves before rebuilding.",
+      "code": [
+        {
+          "file": "vscode/extension.cjs",
+          "line": 105,
+          "note": "schedule"
+        }
+      ]
+    },
+    "builder": {
+      "desc": "Validates every flow, reuses cached SVGs for unchanged layouts, and creates one offline HTML player.",
+      "code": [
+        {
+          "file": "skills/motion-explainer/scripts/build.mjs",
+          "line": 42,
+          "note": "build"
+        }
+      ]
+    },
+    "viewer": {
+      "desc": "A native webview preserves the upstream player. Source references are checked and opened on the workspace host.",
+      "code": [
+        {
+          "file": "vscode/extension.cjs",
+          "line": 56,
+          "note": "native source links"
+        }
+      ]
+    }
+  },
+  "flows": [
+    {
+      "id": "first-explanation",
+      "label": "First explanation",
+      "description": "The first built walkthrough opens inside the IDE.",
+      "steps": [
+        {
+          "edge": "agent->specs",
+          "say": "The coding agent grounds the diagram and narration in source files it has read.",
+          "packet": {
+            "label": "diagram + flows"
+          }
+        },
+        {
+          "edge": "specs->builder",
+          "say": "The skill invokes the builder without launching a separate browser.",
+          "packet": {
+            "label": "node build.mjs"
+          },
+          "code": [
+            {
+              "file": "skills/motion-explainer/scripts/build.mjs",
+              "line": 42,
+              "note": "builder entry"
+            }
+          ]
+        },
+        {
+          "edge": "builder->layout_engine",
+          "say": "A new layout is rendered locally. Cached layouts skip this work.",
+          "packet": {
+            "label": "diagram.kymo"
+          }
+        },
+        {
+          "edge": "layout_engine->builder",
+          "say": "The SVG receives stable node and edge tags so packets can follow the drawn paths.",
+          "packet": {
+            "label": "diagram.svg"
+          }
+        },
+        {
+          "edge": "builder->html",
+          "say": "The builder combines diagram, steps, payloads, and controls into a self-contained player.",
+          "packet": {
+            "label": "index.html"
+          }
+        },
+        {
+          "edge": "html->watcher",
+          "say": "The extension sees the generated file change after the build completes.",
+          "packet": {
+            "label": "file changed"
+          },
+          "code": [
+            {
+              "file": "vscode/extension.cjs",
+              "line": 181,
+              "note": "generated player watcher"
+            }
+          ]
+        },
+        {
+          "edge": "watcher->viewer",
+          "say": "The same native tab is revealed without taking focus from the coding conversation.",
+          "packet": {
+            "label": "open player"
+          },
+          "code": [
+            {
+              "file": "vscode/extension.cjs",
+              "line": 74,
+              "note": "serialized reloads"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "follow-up",
+      "label": "Follow-up edit",
+      "description": "A follow-up changes the explanation and refreshes the existing view.",
+      "steps": [
+        {
+          "edge": "agent->specs",
+          "say": "A substantive follow-up updates the actual source of the walkthrough, not just the chat response.",
+          "packet": {
+            "label": "updated narration"
+          }
+        },
+        {
+          "edge": "specs->watcher",
+          "say": "The source watcher waits for related saves before scheduling a rebuild.",
+          "packet": {
+            "label": "saved JSON or Kymo"
+          },
+          "code": [
+            {
+              "file": "vscode/extension.cjs",
+              "line": 155,
+              "note": "source watcher"
+            }
+          ]
+        },
+        {
+          "edge": "watcher->builder",
+          "say": "Concurrent saves for the same walkthrough are coalesced. Invalid JSON keeps the last valid player visible.",
+          "packet": {
+            "label": "rebuild"
+          },
+          "code": [
+            {
+              "file": "vscode/extension.cjs",
+              "line": 81,
+              "note": "build queue"
+            }
+          ]
+        },
+        {
+          "edge": "builder->html",
+          "say": "Narration-only changes reuse the cached diagram and produce a fresh player quickly.",
+          "packet": {
+            "label": "updated player"
+          },
+          "code": [
+            {
+              "file": "skills/motion-explainer/scripts/build.mjs",
+              "line": 67,
+              "note": "SVG cache"
+            }
+          ]
+        },
+        {
+          "edge": "html->watcher",
+          "say": "The new generated file signals that the follow-up is ready to display.",
+          "packet": {
+            "label": "changed index.html"
+          }
+        },
+        {
+          "edge": "watcher->viewer",
+          "say": "The existing tab reloads with the new explanation and can start playback.",
+          "packet": {
+            "label": "refresh player"
+          }
+        }
+      ]
+    }
+  ],
+  "next": [
+    {
+      "text": "Adjust rebuild scheduling and native editor behavior",
+      "file": "vscode/extension.cjs",
+      "line": 105
+    },
+    {
+      "text": "Change the offline player controls and animation",
+      "file": "skills/motion-explainer/assets/player.html",
+      "line": 523
+    }
+  ]
+}

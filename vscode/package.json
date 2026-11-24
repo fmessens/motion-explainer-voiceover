@@ -1,0 +1,38 @@
+{
+  "name": "motion-explainer",
+  "displayName": "Motion Explainer",
+  "description": "Animated code walkthroughs from your coding agent, directly in VS Code.",
+  "version": "0.1.4",
+  "publisher": "local-motion",
+  "license": "MIT",
+  "engines": {"vscode": "^1.100.0"},
+  "main": "./extension.cjs",
+  "extensionKind": ["workspace"],
+  "activationEvents": ["onStartupFinished", "onWebviewPanel:motionExplainer.player"],
+  "capabilities": {"untrustedWorkspaces": {"supported": false}},
+  "contributes": {
+    "commands": [
+      {"command": "motionExplainer.open", "title": "Motion Explainer: Open Walkthrough", "icon": "$(play-circle)"},
+      {"command": "motionExplainer.build", "title": "Motion Explainer: Build and Open", "icon": "$(tools)"},
+      {"command": "motionExplainer.sample", "title": "Motion Explainer: Open Sample"},
+      {"command": "motionExplainer.refresh", "title": "Motion Explainer: Refresh Player", "icon": "$(refresh)"},
+      {"command": "motionExplainer.output", "title": "Motion Explainer: Show Output", "icon": "$(output)"},
+      {"command": "motionExplainer.installSkills", "title": "Motion Explainer: Install Workspace Skills"},
+      {"command": "motionExplainer.menu", "title": "Motion Explainer: Connection Menu"}
+    ],
+    "viewsContainers": {"activitybar": [{"id": "motionExplainer", "title": "Motion Explainer", "icon": "resources/motion.svg"}]},
+    "views": {"motionExplainer": [{"id": "motionExplainer.walkthroughs", "name": "Walkthroughs"}]},
+    "viewsWelcome": [{"view": "motionExplainer.walkthroughs", "contents": "Ask your coding agent to use motion-explainer. Walkthroughs appear here after building.\n[Open Sample](command:motionExplainer.sample)\n[Install Workspace Skills](command:motionExplainer.installSkills)"}],
+    "menus": {
+      "explorer/context": [{"command": "motionExplainer.build", "when": "resourceFilename == explainer.json || resourceExtname == .kymo", "group": "navigation"}, {"command": "motionExplainer.open", "when": "resourceFilename == index.html", "group": "navigation"}],
+      "editor/title": [{"command": "motionExplainer.refresh", "when": "activeWebviewPanelId == motionExplainer.player", "group": "navigation"}, {"command": "motionExplainer.output", "when": "activeWebviewPanelId == motionExplainer.player", "group": "navigation"}]
+    },
+    "configuration": {"title": "Motion Explainer", "properties": {
+      "motionExplainer.enabled": {"type": "boolean", "default": true},
+      "motionExplainer.autoOpen": {"type": "boolean", "default": true, "description": "Open the native player when a generated walkthrough changes."},
+      "motionExplainer.autoRebuild": {"type": "boolean", "default": true, "description": "Rebuild after saving explainer.json or a diagram.kymo file."},
+      "motionExplainer.autoPlay": {"type": "boolean", "default": true, "description": "Start playback when a newly built walkthrough opens."},
+      "motionExplainer.offline": {"type": "boolean", "default": true, "description": "Render new diagrams locally using Kymo. Requires npm for the first renderer download; built-in icons only. Disable to explicitly allow diagram labels to be sent to Kymo's public renderer.", "restricted": true}
+    }}
+  }
+}

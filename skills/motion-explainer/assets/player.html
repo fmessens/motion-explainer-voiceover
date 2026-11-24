@@ -83,6 +83,13 @@
     background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); background-size: 22px 22px;
   }
   .stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .stage:not(.is-playing) > svg { cursor: grab; touch-action: none; }
+  .stage.is-dragging > svg { cursor: grabbing; }
+  .canvas-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  .canvas-tools button { min-width: 32px; min-height: 32px; border-radius: 6px; }
+  .canvas-tools button:hover:enabled { background: var(--surface-2); }
+  .canvas-tools button:disabled { opacity: .4; cursor: default; }
+  .stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .stage-hint { position: absolute; left: 14px; bottom: 12px; font-size: 11.5px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 4px 9px; border-radius: 999px; pointer-events: none; }
 
   /* Kymo SVG theming + state */
@@ -165,17 +172,25 @@
   .pill { font: 600 12px var(--mono); padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); flex: none; }
   .pill:hover, .pill[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
 
+  .stage.is-paused svg * { animation-play-state: paused !important; }
+  .voice-control { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .voice-control input { accent-color: var(--accent); }
+  .voice-select { max-width: 145px; min-width: 0; background: var(--surface); }
+  .voice-status { font-size: 11px; color: var(--muted); flex-basis: 100%; }
+  footer { flex-wrap: wrap; }
+  @media (max-width: 540px) { .voice-select { max-width: 125px; } .dots { flex-basis: calc(100% - 150px); } }
+
   @media (max-width: 900px) {
     body { overflow: auto; grid-template-rows: auto auto auto auto; }
     main { grid-template-columns: minmax(0, 1fr); }
     .dots { gap: 4px; }
     .dot { min-width: 8px; }
-    .stage { height: 58vh; }
+    .stage { height: 50vh; position: sticky; top: 0; z-index: 2; }
     .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     .tabs { max-width: 100%; }
     header { flex-wrap: wrap; }
     .stage-hint { display: none; }
-    footer { position: sticky; bottom: 0; padding: 8px 12px; }
+    footer { position: sticky; bottom: 0; z-index: 3; padding: 8px 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .stage svg [data-edge].me-active, .stage svg .me-overview [data-edge] { animation: none; }
@@ -196,9 +211,14 @@
 </header>
 <details class="lint" id="lint"><summary id="lintSummary"></summary><ul id="lintList"></ul></details>
 <main>
-  <section class="stage" id="stage" aria-label="Animated diagram">
+  <section class="stage" id="stage" aria-label="Animated diagram. When paused: drag or scroll to pan, Control plus scroll to zoom, arrow keys to pan, zero to fit." tabindex="0">
 <!--KYMO_SVG-->
-    <div class="stage-hint">← → step · space play · click a node</div>
+    <div class="canvas-tools" role="group" aria-label="Diagram navigation">
+      <button id="zoomOutBtn" aria-label="Zoom out">−</button>
+      <button id="zoomInBtn" aria-label="Zoom in">+</button>
+      <button id="fitBtn" aria-label="Fit diagram">Fit</button>
+    </div>
+    <div class="stage-hint">Pause to drag / scroll · ctrl + scroll zoom · Fit resets</div>
   </section>
   <aside class="panel" id="panel" aria-live="polite"></aside>
 </main>
@@ -207,6 +227,9 @@
   <button class="ctrl play" id="playBtn" aria-label="Play"></button>
   <button class="ctrl" id="nextBtn" aria-label="Next step"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 5.5 16 12l-7.5 6.5z"/></svg></button>
   <div class="dots" id="dots" role="group" aria-label="Steps"></div>
+  <label class="voice-control"><input id="voiceEnabled" type="checkbox" checked> Voiceover</label>
+  <select class="pill voice-select" id="voiceSelect" aria-label="Narration voice"><option value="">System default</option></select>
+  <span id="voiceStatus" class="voice-status" role="status" hidden></span>
   <button class="pill" id="speedBtn" title="Playback speed">1×</button>
   <button class="pill" id="camBtn" title="Camera follows the action (c)" aria-pressed="true">cam</button>
 </footer>
@@ -216,6 +239,12 @@ const DATA = /*EXPLAINER_DATA*/null;
 
 (() => {
   "use strict";
+  const native = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null;
+  let nativeFile = "";
+  if (native) {
+    window.addEventListener("error", event => native.postMessage({ type: "motion:error", message: event.message }));
+    window.addEventListener("unhandledrejection", event => native.postMessage({ type: "motion:error", message: String(event.reason?.message || event.reason) }));
+  }
   const $ = (id) => document.getElementById(id);
   const NS = "http://www.w3.org/2000/svg";
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -228,7 +257,7 @@ const DATA = /*EXPLAINER_DATA*/null;
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
   const SPEEDS = [0.5, 1, 1.5, 2];
 
-  const state = { flow: 0, step: 0, playing: false, speed: 1, camera: true, token: 0, detail: null };
+  const state = { flow: 0, step: 0, playing: false, paused: false, speed: 1, camera: true, token: 0, detail: null };
 
   // ── SVG setup ────────────────────────────────────────────────────────
   svg.removeAttribute("width");
@@ -242,6 +271,7 @@ const DATA = /*EXPLAINER_DATA*/null;
     if (cut > 0 && cut < fullView[3] / 3) { fullView[1] += cut; fullView[3] -= cut; }
   }
   let view = fullView.slice();
+  let cameraVersion = 0;
   const setView = (v) => { view = v; svg.setAttribute("viewBox", v.map((n) => n.toFixed(1)).join(" ")); };
   setView(fullView);
 
@@ -269,6 +299,25 @@ const DATA = /*EXPLAINER_DATA*/null;
     lab.after(t);
   }
 
+  // Include labels and subtitles, even where they extend beyond Kymo's canvas.
+  function boundsOf(elements) {
+    const points = [];
+    for (const element of elements.filter(Boolean)) {
+      const box = element.getBBox(), matrix = svg.getCTM().inverse().multiply(element.getCTM());
+      for (const [x, y] of [[box.x, box.y], [box.x + box.width, box.y + box.height]]) points.push(new DOMPoint(x, y).matrixTransform(matrix));
+    }
+    if (!points.length) return fullView.slice();
+    const x = Math.min(...points.map(p => p.x)), y = Math.min(...points.map(p => p.y));
+    return [x, y, Math.max(...points.map(p => p.x)) - x, Math.max(...points.map(p => p.y)) - y];
+  }
+  function nodeParts(id) {return [nodeEl(id), nodeLabelEl(id), svg.querySelector(`[data-sub="${CSS.escape(id)}"]`)];}
+  const content = boundsOf(Object.keys(DATA.nodes).flatMap(nodeParts));
+  const left = Math.min(fullView[0], content[0] - 24), top = Math.min(fullView[1], content[1] - 24);
+  fullView[2] = Math.max(fullView[0] + fullView[2], content[0] + content[2] + 24) - left;
+  fullView[3] = Math.max(fullView[1] + fullView[3], content[1] + content[3] + 24) - top;
+  fullView[0] = left; fullView[1] = top;
+  setView(fullView.slice());
+
   /** Resolve a step's edge to { path, reverse, ghost }. */
   function resolveEdge(key) {
     let el = edgeEl(key);
@@ -288,13 +337,14 @@ const DATA = /*EXPLAINER_DATA*/null;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const md = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  const sleep = (ms, token) => new Promise((res) => setTimeout(() => res(token === state.token), ms));
   const tween = (ms, token, fn) => new Promise((res) => {
     if (reduceMotion || ms <= 0) { fn(1); return res(true); }
-    const t0 = performance.now();
+    let previous = performance.now(), elapsed = 0;
     const tick = (now) => {
       if (token !== state.token) return res(false);
-      const t = Math.min(1, (now - t0) / ms);
+      if (!state.paused) elapsed += (now - previous) * state.speed;
+      previous = now;
+      const t = Math.min(1, elapsed / ms);
       fn(ease(t));
       t < 1 ? requestAnimationFrame(tick) : res(true);
     };
@@ -311,13 +361,13 @@ const DATA = /*EXPLAINER_DATA*/null;
   const ROOT = DATA.root.replace(/\\/g, "/").replace(/\/$/, "");
   const refLoc = (r) => (r.line ? `${r.file}:${r.line}` : r.file);
   // vscode://file/<absolute path>[:line] — POSIX roots already start with "/".
-  const refHref = (r) => `vscode://file${ROOT.startsWith("/") ? "" : "/"}${encodeURI(`${ROOT}/${r.file}`)}${r.line ? `:${r.line}` : ""}`;
+  const refHref = (r) => ROOT ? `vscode://file${ROOT.startsWith("/") ? "" : "/"}${encodeURI(`${ROOT}/${r.file}`)}${r.line ? `:${r.line}` : ""}` : "#";
 
   function refsHtml(refs) {
     if (!refs?.length) return "";
     const items = refs.map((r) => {
       const loc = refLoc(r);
-      return `<li><a href="${esc(refHref(r))}" title="Open in VS Code">${esc(loc)}</a>${r.note ? `<span class="note">${md(r.note)}</span>` : ""}<button class="copy" data-copy="${esc(loc)}">copy</button></li>`;
+      return `<li><a href="${esc(refHref(r))}" title="Open in VS Code" data-me-file="${esc(r.file)}" data-me-line="${r.line || 1}">${esc(loc)}</a>${r.note ? `<span class="note">${md(r.note)}</span>` : ""}<button class="copy" data-copy="${esc(loc)}">copy</button></li>`;
     });
     return `<div class="card"><h3>Code</h3><ul class="refs">${items.join("")}</ul></div>`;
   }
@@ -326,7 +376,7 @@ const DATA = /*EXPLAINER_DATA*/null;
     if (!spec.next?.length) return "";
     const items = spec.next.map((n) => {
       if (typeof n === "string") return `<li>${md(n)}</li>`;
-      return `<li>${md(n.text)}${n.file ? ` <a class="inline-ref" href="${esc(refHref(n))}" title="Open in VS Code">${esc(refLoc(n))}</a>` : ""}</li>`;
+      return `<li>${md(n.text)}${n.file ? ` <a class="inline-ref" href="${esc(refHref(n))}" title="Open in VS Code" data-me-file="${esc(n.file)}" data-me-line="${n.line || 1}">${esc(refLoc(n))}</a>` : ""}</li>`;
     });
     return `<div class="card"><h3>What to do next</h3><ol class="next">${items.join("")}</ol></div>`;
   }
@@ -362,26 +412,20 @@ const DATA = /*EXPLAINER_DATA*/null;
     if (!step || !state.camera) return fullView;
     const ids = involved(step);
     if (!ids.length) return fullView;
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    const grow = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
-    ids.forEach((id) => { const n = DATA.nodes[id]; grow(n.x - 60, n.y - 55); grow(n.x + 60, n.y + 75); });
+    const parts = ids.flatMap(nodeParts);
     const r = step.edge && resolveEdge(step.edge);
-    if (r?.el) { const b = r.el.getBBox(); grow(b.x, b.y); grow(b.x + b.width, b.y + b.height); }
-    const pad = 70;
-    let w = x1 - x0 + pad * 2, h = y1 - y0 + pad * 2;
-    // Never zoom in so far that the surroundings disappear.
-    const minW = fullView[2] * 0.72, minH = fullView[3] * 0.72;
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    w = Math.min(Math.max(w, minW), fullView[2]);
-    h = Math.min(Math.max(h, minH), fullView[3]);
-    const x = Math.min(Math.max(cx - w / 2, fullView[0]), fullView[0] + fullView[2] - w);
-    const y = Math.min(Math.max(cy - h / 2, fullView[1]), fullView[1] + fullView[3] - h);
-    return [x, y, w, h];
+    if (r?.el) parts.push(r.el, edgeLabelEl(r.key));
+    const [x, y, width, height] = boundsOf(parts);
+    const aspect = stage.clientWidth / Math.max(1, stage.clientHeight);
+    // Match the actual viewport and leave room for packet labels and controls.
+    const w = Math.max(width + 120, (height + 150) * aspect);
+    const h = w / Math.max(.01, aspect);
+    return [x + width / 2 - w / 2, y + height / 2 - h / 2 - 15, w, h];
   }
 
   function moveCamera(target, token) {
-    const from = view.slice();
-    return tween(650 / state.speed, token, (t) => setView(from.map((v, k) => v + (target[k] - v) * t)));
+    const from = view.slice(), revision = ++cameraVersion;
+    return tween(650, token, (t) => {if (revision === cameraVersion) setView(from.map((v, k) => v + (target[k] - v) * t));});
   }
 
   function ring(id) {
@@ -428,7 +472,7 @@ const DATA = /*EXPLAINER_DATA*/null;
       packet.setAttribute("transform", `translate(${p.x},${p.y})`);
     };
     at(0);
-    const ms = (1100 * Math.min(1.7, Math.max(0.8, len / 260))) / state.speed;
+    const ms = 1100 * Math.min(1.7, Math.max(0.8, len / 260));
     const ok = await tween(ms, token, at);
     if (ok) {
       ring(endpoints(step)[1]);
@@ -504,80 +548,266 @@ const DATA = /*EXPLAINER_DATA*/null;
     $("nextBtn").disabled = state.step === flow.steps.length;
   }
   function renderPlay() {
+    stage.classList.toggle("is-paused", state.paused);
+    stage.classList.toggle("is-playing", state.playing);
+    for (const id of ["zoomOutBtn", "zoomInBtn", "fitBtn"]) $(id).disabled = state.playing;
     $("playBtn").innerHTML = state.playing ? ICON_PAUSE : ICON_PLAY;
     $("playBtn").setAttribute("aria-label", state.playing ? "Pause" : "Play");
   }
   function updateHash() {
     const h = `#${flows[state.flow].id}/${state.step}`;
     if (location.hash !== h) history.replaceState(null, "", h);
+    if (native && nativeFile) native.setState({ file: nativeFile, flow: flows[state.flow].id, step: state.step });
+  }
+
+  // Speech belongs to the current step; stale callbacks cannot advance a new flow.
+  const speechAvailable = typeof window.speechSynthesis?.speak === "function" && typeof SpeechSynthesisUtterance === "function";
+  const voiceEnabled = $("voiceEnabled"), voiceSelect = $("voiceSelect");
+  const preference = (key, fallback = "") => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
+  const remember = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+  voiceEnabled.checked = preference("motion-explainer-voiceover", "true") === "true";
+  let voices = [], selectedVoice = preference("motion-explainer-voice"), speechVersion = 0, activeSpeech = null;
+  let narrationTask = Promise.resolve(false), stepTask = Promise.resolve(true), stepFinished = true;
+  let playbackVersion = 0, playbackLoop = null;
+  function populateVoices() {
+    voices = speechSynthesis.getVoices();
+    voiceSelect.replaceChildren(new Option("System default", ""));
+    for (const voice of voices) voiceSelect.add(new Option(`${voice.name} (${voice.lang}${voice.localService === false ? ", online" : ""})`, voice.voiceURI));
+    voiceSelect.value = voices.some(voice => voice.voiceURI === selectedVoice) ? selectedVoice : "";
+  }
+  if (speechAvailable) { populateVoices(); speechSynthesis.addEventListener?.("voiceschanged", populateVoices); }
+  else { voiceEnabled.disabled = true; voiceSelect.disabled = true; voiceEnabled.title = "Speech is not available in this browser."; }
+  function cancelSpeech() {
+    speechVersion++;
+    if (speechAvailable) speechSynthesis.cancel();
+    activeSpeech?.finish(false); activeSpeech = null;
+  }
+  function narrate(text) {
+    cancelSpeech();
+    if (!voiceEnabled.checked || !speechAvailable || !text.trim()) return Promise.resolve(false);
+    const plain = document.createElement("div"); plain.innerHTML = md(text);
+    const utterance = new SpeechSynthesisUtterance(plain.textContent);
+    utterance.rate = state.speed;
+    const selected = voices.find(voice => voice.voiceURI === selectedVoice);
+    if (selected) { utterance.voice = selected; utterance.lang = selected.lang; }
+    return new Promise(resolve => {
+      const version = speechVersion;
+      const job = {settled: false, timer: null, deadline: 0, remaining: 4000, finish(played) {
+        if (job.settled) return;
+        job.settled = true; clearTimeout(job.timer); resolve(played);
+      }};
+      // Keep the utterance alive and bound unavailable/hung browser voices.
+      job.utterance = utterance; activeSpeech = job;
+      const arm = ms => {
+        clearTimeout(job.timer); job.remaining = ms; job.deadline = performance.now() + ms;
+        if (!state.paused) job.timer = setTimeout(() => {
+          if (version !== speechVersion || job.settled) return;
+          job.finish(false); speechVersion++; speechSynthesis.cancel();
+          $("voiceStatus").textContent = "Voice unavailable; using reading pace."; $("voiceStatus").hidden = false;
+        }, ms);
+      };
+      job.arm = arm;
+      utterance.onstart = () => {
+        if (version !== speechVersion || job.settled) return;
+        $("voiceStatus").hidden = true;
+        arm(Math.max(15000, plain.textContent.split(/\s+/).length * 1200 / state.speed));
+        if (state.paused) speechSynthesis.pause();
+      };
+      utterance.onend = () => { if (version === speechVersion) job.finish(true); };
+      utterance.onerror = () => {
+        if (version !== speechVersion || job.settled) return;
+        job.finish(false); $("voiceStatus").textContent = "Voice unavailable; using reading pace."; $("voiceStatus").hidden = false;
+      };
+      arm(4000);
+      try { if (!state.paused) speechSynthesis.resume(); speechSynthesis.speak(utterance); if (state.paused) pauseSpeech(); }
+      catch { job.finish(false); }
+    });
+  }
+  function pauseSpeech() {
+    if (!speechAvailable) return;
+    speechSynthesis.pause();
+    if (activeSpeech && !activeSpeech.settled) {
+      activeSpeech.remaining = Math.max(0, activeSpeech.deadline - performance.now()); clearTimeout(activeSpeech.timer);
+    }
+  }
+  function resumeSpeech() {
+    if (!speechAvailable) return;
+    if (activeSpeech && !activeSpeech.settled) activeSpeech.arm(activeSpeech.remaining);
+    speechSynthesis.resume();
+  }
+  function restartNarration() {
+    const text = state.step && !state.detail ? flows[state.flow].steps[state.step - 1].say : "";
+    narrationTask = narrate(text || "");
+    if (state.paused) pauseSpeech();
+  }
+  function readingPace(ms, token, speech) {
+    return new Promise(resolve => {
+      let previous = performance.now(), elapsed = 0;
+      const tick = now => {
+        if (token !== state.token || speech !== narrationTask) return resolve(false);
+        if (!state.paused) elapsed += (now - previous) * state.speed;
+        previous = now;
+        elapsed >= ms ? resolve(true) : requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+  function stopPlayback() {
+    playbackVersion++; state.playing = false; state.paused = false; cancelSpeech(); renderPlay();
   }
 
   // ── Navigation ───────────────────────────────────────────────────────
-  async function go(stepIndex, { animate = true } = {}) {
+  function go(stepIndex, { animate = true, speak = true } = {}) {
     const flow = flows[state.flow];
     state.step = Math.max(0, Math.min(stepIndex, flow.steps.length));
-    state.detail = null;
+    state.detail = null; state.paused = false;
     const token = ++state.token;
     applyStepClasses(flow, state.step);
     renderPanel(); renderDots(); updateHash();
     const step = state.step ? flow.steps[state.step - 1] : null;
-    const cam = moveCamera(cameraTarget(step), token);
-    if (!step) return cam;
-    if (!animate) { await cam; return true; }
-    await cam;
-    if (token !== state.token) return false;
-    if (step.edge) return travel(step, token);
-    (step.focus || []).forEach(ring);
-    return true;
+    narrationTask = narrate(speak && step ? step.say : "");
+    stepFinished = !step;
+    const motion = (async () => {
+      await moveCamera(cameraTarget(step), token);
+      if (token !== state.token) return false;
+      if (!step || !animate) return true;
+      if (step.edge) return travel(step, token);
+      (step.focus || []).forEach(ring); return true;
+    })();
+    stepTask = (async () => {
+      if (!await motion || token !== state.token) return false;
+      if (step) {
+        while (token === state.token) {
+          const speech = narrationTask;
+          const spoken = await speech;
+          if (speech !== narrationTask) continue;
+          if (spoken) break;
+          const dwell = Math.min(7000, Math.max(2200, (step.say || "").split(/\s+/).length * 270));
+          if (await readingPace(dwell, token, speech)) break;
+        }
+      }
+      if (token !== state.token) return false;
+      stepFinished = true; return true;
+    })();
+    return stepTask;
   }
-
-  async function playLoop() {
-    while (state.playing) {
-      const flow = flows[state.flow];
-      if (state.step >= flow.steps.length) { setPlaying(false); break; }
-      const ok = await go(state.step + 1);
-      if (!ok || !state.playing) break;
-      const words = (flow.steps[state.step - 1].say || "").split(/\s+/).length;
-      const dwell = Math.min(7000, Math.max(2200, words * 270)) / state.speed;
-      const token = state.token;
-      if (!(await sleep(dwell, token))) break;
-      if (state.step >= flow.steps.length) { setPlaying(false); break; }
+  async function playLoop(version) {
+    let useCurrent = state.step > 0 && !stepFinished;
+    if (!useCurrent && state.step >= flows[state.flow].steps.length) go(0, {animate: false, speak: false});
+    while (version === playbackVersion) {
+      if (!state.playing) {await new Promise(requestAnimationFrame); continue;}
+      const task = useCurrent ? stepTask : go(state.step + 1);
+      useCurrent = false;
+      if (!await task || version !== playbackVersion) break;
+      while (!state.playing && version === playbackVersion) await new Promise(requestAnimationFrame);
+      if (version !== playbackVersion) break;
+      if (state.step >= flows[state.flow].steps.length) {state.playing = false; state.paused = false; renderPlay(); break;}
     }
   }
   function setPlaying(on) {
-    state.playing = on;
-    renderPlay();
-    if (on) playLoop();
+    state.playing = on; state.paused = !on; renderPlay();
+    if (!on) {pauseSpeech(); return;}
+    if (state.camera) {cameraVersion++; setView(cameraTarget(state.step ? flows[state.flow].steps[state.step - 1] : null));}
+    if (matchMedia("(max-width: 900px)").matches) stage.scrollIntoView({block: "start"});
+    resumeSpeech();
+    if (voiceEnabled.checked && speechAvailable && state.step > 0 && !activeSpeech && !stepFinished) restartNarration();
+    if (state.detail) go(state.step, {animate: false});
+    const version = playbackVersion;
+    if (playbackLoop?.version === version) return;
+    const loop = {version}; playbackLoop = loop;
+    loop.task = playLoop(version).finally(() => {if (playbackLoop === loop) playbackLoop = null;});
   }
-  function selectFlow(i, step = 0) {
+  function selectFlow(i, step = 0, speak = true) {
     if (i < 0 || i >= flows.length) return;
-    setPlaying(false);
+    stopPlayback();
     state.flow = i;
     renderTabs();
-    go(step, { animate: false });
+    go(step, { animate: false, speak });
   }
   function showNode(id) {
-    setPlaying(false);
+    stopPlayback(); ++state.token;
     state.detail = id;
     clearClasses();
     stage.classList.add("is-dimming");
     markNode(id, "me-focus");
+    cameraVersion++; setView(cameraTarget({focus: [id]}));
     ring(id);
     renderPanel();
   }
 
   // ── Events ───────────────────────────────────────────────────────────
-  $("prevBtn").onclick = () => { setPlaying(false); go(state.step - 1, { animate: false }); };
-  $("nextBtn").onclick = () => { setPlaying(false); go(state.step + 1); };
+  function pan(dx, dy) {
+    if (state.playing) return;
+    cameraVersion++;
+    const matrix = svg.getScreenCTM().inverse();
+    setView([view[0] + dx * matrix.a, view[1] + dy * matrix.d, view[2], view[3]]);
+  }
+  function zoom(factor, point) {
+    if (state.playing) return;
+    cameraVersion++;
+    const nextWidth = Math.max(fullView[2] / 12, Math.min(fullView[2] * 3, view[2] * factor));
+    const scale = nextWidth / view[2];
+    const anchor = point || new DOMPoint(view[0] + view[2] / 2, view[1] + view[3] / 2);
+    setView([anchor.x - (anchor.x - view[0]) * scale, anchor.y - (anchor.y - view[1]) * scale, nextWidth, view[3] * scale]);
+  }
+  $("zoomOutBtn").onclick = () => zoom(1.25);
+  $("zoomInBtn").onclick = () => zoom(.8);
+  $("fitBtn").onclick = () => {if (!state.playing) {cameraVersion++; setView(fullView.slice());}};
+  svg.addEventListener("wheel", event => {
+    if (state.playing) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.clientHeight : 1;
+    if (event.ctrlKey || event.metaKey) zoom(Math.exp(Math.max(-1, Math.min(1, event.deltaY * unit * .002))), new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.getScreenCTM().inverse()));
+    else pan((event.shiftKey ? event.deltaY : event.deltaX) * unit, (event.shiftKey ? 0 : event.deltaY) * unit);
+  }, {passive: false});
+  let drag = null, dragged = false;
+  svg.addEventListener("pointerdown", event => {
+    if (state.playing || event.button !== 0) return;
+    drag = {id: event.pointerId, x: event.clientX, y: event.clientY}; dragged = false;
+  });
+  svg.addEventListener("pointermove", event => {
+    if (!drag || drag.id !== event.pointerId || state.playing) return;
+    const dx = drag.x - event.clientX, dy = drag.y - event.clientY;
+    if (!dragged && Math.hypot(dx, dy) < 4) return;
+    dragged = true; svg.setPointerCapture(event.pointerId);
+    stage.classList.add("is-dragging"); pan(dx, dy);
+    drag.x = event.clientX; drag.y = event.clientY;
+  });
+  const endDrag = () => {drag = null; stage.classList.remove("is-dragging");};
+  svg.addEventListener("pointerup", endDrag); svg.addEventListener("pointercancel", endDrag); svg.addEventListener("lostpointercapture", endDrag);
+  svg.addEventListener("click", event => {if (dragged) {event.stopImmediatePropagation(); dragged = false;}}, true);
+  stage.addEventListener("keydown", event => {
+    if (event.target !== stage || state.playing) return;
+    const moves = {ArrowLeft: [-45, 0], ArrowRight: [45, 0], ArrowUp: [0, -45], ArrowDown: [0, 45]};
+    if (moves[event.key]) pan(...moves[event.key]);
+    else if (event.key === "+" || event.key === "=") zoom(.8);
+    else if (event.key === "-") zoom(1.25);
+    else if (event.key === "0") $("fitBtn").click();
+    else return;
+    event.preventDefault(); event.stopPropagation();
+  });
+  new ResizeObserver(() => {
+    if (state.playing && state.camera) {cameraVersion++; setView(cameraTarget(state.step ? flows[state.flow].steps[state.step - 1] : null));}
+  }).observe(stage);
+  $("prevBtn").onclick = () => { stopPlayback(); go(state.step - 1, { animate: false }); };
+  $("nextBtn").onclick = () => { stopPlayback(); go(state.step + 1); };
   $("playBtn").onclick = () => setPlaying(!state.playing);
   $("speedBtn").onclick = () => {
     state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
     $("speedBtn").textContent = `${state.speed}×`;
+    if (activeSpeech && !activeSpeech.settled) restartNarration();
   };
+  voiceEnabled.onchange = () => {
+    remember("motion-explainer-voiceover", String(voiceEnabled.checked)); restartNarration();
+  };
+  voiceSelect.onchange = () => {
+    selectedVoice = voiceSelect.value; remember("motion-explainer-voice", selectedVoice); restartNarration();
+  };
+  window.addEventListener("pagehide", () => {stopPlayback(); state.token++; if (speechAvailable) speechSynthesis.removeEventListener?.("voiceschanged", populateVoices);});
   $("camBtn").onclick = () => {
     state.camera = !state.camera;
     $("camBtn").setAttribute("aria-pressed", state.camera);
-    moveCamera(cameraTarget(state.step ? flows[state.flow].steps[state.step - 1] : null), ++state.token);
+    moveCamera(cameraTarget(state.step ? flows[state.flow].steps[state.step - 1] : null), state.token);
   };
   $("themeBtn").onclick = () => {
     const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
@@ -586,7 +816,7 @@ const DATA = /*EXPLAINER_DATA*/null;
   };
   $("fsBtn").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
   $("tabs").onclick = (e) => { const b = e.target.closest("[data-flow]"); if (b) selectFlow(Number(b.dataset.flow)); };
-  $("dots").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) { setPlaying(false); go(Number(b.dataset.step)); } };
+  $("dots").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) { stopPlayback(); go(Number(b.dataset.step)); } };
   svg.addEventListener("click", (e) => { const n = e.target.closest("[data-node],[data-node-label]"); if (n) showNode(n.dataset.node || n.dataset.nodeLabel); });
   panel.addEventListener("click", (e) => {
     const t = e.target.closest("[data-copy],[data-back],[data-goto],[data-node-jump]");
@@ -606,11 +836,11 @@ const DATA = /*EXPLAINER_DATA*/null;
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,textarea")) return;
     const k = e.key;
-    if (k === "ArrowRight") { setPlaying(false); go(state.step + 1); }
-    else if (k === "ArrowLeft") { setPlaying(false); go(state.step - 1, { animate: false }); }
+    if (k === "ArrowRight") { stopPlayback(); go(state.step + 1); }
+    else if (k === "ArrowLeft") { stopPlayback(); go(state.step - 1, { animate: false }); }
     else if (k === " ") { e.preventDefault(); setPlaying(!state.playing); }
-    else if (k === "Home") go(0, { animate: false });
-    else if (k === "End") go(flows[state.flow].steps.length, { animate: false });
+    else if (k === "Home") { stopPlayback(); go(0, { animate: false }); }
+    else if (k === "End") { stopPlayback(); go(flows[state.flow].steps.length, { animate: false }); }
     else if (k === "Escape" && state.detail) go(state.step, { animate: false });
     else if (/^[1-9]$/.test(k)) selectFlow(Number(k) - 1);
     else if (k === "c") $("camBtn").click();
@@ -618,6 +848,24 @@ const DATA = /*EXPLAINER_DATA*/null;
     else if (k === "f") $("fsBtn").click();
     else return;
   });
+
+  if (native) {
+    document.addEventListener("click", event => {
+      const reference = event.target.closest?.("a[data-me-file]");
+      if (!reference) return;
+      event.preventDefault();
+      native.postMessage({ type: "motion:open-source", file: reference.dataset.meFile, line: Number(reference.dataset.meLine) });
+    });
+    window.addEventListener("message", event => {
+      const message = event.data;
+      if (message?.type !== "motion:configure" || typeof message.file !== "string") return;
+      nativeFile = message.file;
+      const flow = flows.findIndex(item => item.id === message.flow);
+      selectFlow(flow >= 0 ? flow : 0, flow >= 0 && Number.isInteger(message.step) ? message.step : 0, message.autoplay === true);
+      updateHash();
+      if (message.autoplay === true) setPlaying(true);
+    });
+  }
 
   // ── Boot ─────────────────────────────────────────────────────────────
   try { const t = localStorage.getItem("motion-explainer-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
@@ -631,12 +879,13 @@ const DATA = /*EXPLAINER_DATA*/null;
   const fi = Math.max(0, flows.findIndex((f) => f.id === hFlow));
   state.flow = fi;
   renderTabs(); renderPlay();
-  go(Number(hStep) || 0, { animate: false });
+  go(Number(hStep) || 0, { animate: false, speak: false });
   window.addEventListener("hashchange", () => {
     const [f, s] = decodeURIComponent(location.hash.slice(1)).split("/");
     const i = flows.findIndex((x) => x.id === f);
     if (i >= 0 && (i !== state.flow || Number(s) !== state.step)) selectFlow(i, Number(s) || 0);
   });
+  native?.postMessage({ type: "motion:ready" });
 })();
 </script>
 </body>

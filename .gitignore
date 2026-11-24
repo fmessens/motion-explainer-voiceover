@@ -2,3 +2,15 @@ node_modules/
 .DS_Store
 # Generated players are rebuildable; examples keep diagram.svg + .render-cache.json as offline fixtures.
 skills/motion-explainer/examples/*/index.html
+
+trial-results/
+vscode/output/
+explainers/**/index.html
+
+# Local credentials and editor state do not belong in a public fork.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.vscode/

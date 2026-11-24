@@ -39,7 +39,7 @@ function openInBrowser(file) {
   spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
 }
 
-export async function build(dir, { offline, strict, cache = true } = {}) {
+export async function build(dir, { offline, strict, cache = true, portable = false } = {}) {
   dir = resolve(dir);
   const specPath = join(dir, "explainer.json");
   if (!existsSync(specPath)) throw new Error(`no explainer.json in ${dir}`);
@@ -86,7 +86,7 @@ export async function build(dir, { offline, strict, cache = true } = {}) {
     nodes: tagged.nodes,
     edges: tagged.edges.map(({ key, src, dst, label }) => ({ key, src, dst, label })),
     warnings,
-    root,
+    root: portable ? "" : root,
     engine,
     builtAt: new Date().toISOString(),
   };
@@ -108,7 +108,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2);
   const dir = args.find((a) => !a.startsWith("--"));
   if (!dir) {
-    console.error("usage: build.mjs <explainer-dir> [--offline] [--open] [--strict] [--no-cache]");
+    console.error("usage: build.mjs <explainer-dir> [--offline] [--open] [--strict] [--no-cache] [--portable]");
     process.exit(2);
   }
   try {
@@ -116,6 +116,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       offline: args.includes("--offline") || process.env.MOTION_EXPLAINER_OFFLINE === "1",
       strict: args.includes("--strict"),
       cache: !args.includes("--no-cache"),
+      portable: args.includes("--portable"),
     });
     for (const w of r.warnings) console.log(`  warn  ${w}`);
     for (const e of r.errors) console.log(`  ERROR ${e}`);
