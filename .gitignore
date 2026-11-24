@@ -5,6 +5,7 @@ skills/motion-explainer/examples/*/index.html
 
 trial-results/
 vscode/output/
+.history/
 explainers/**/index.html
 
 # Local credentials and editor state do not belong in a public fork.

@@ -33,6 +33,7 @@ node skills/motion-explainer/scripts/build.mjs skills/motion-explainer/examples/
 - narration explains *why* each step happens, not just what
 - `file:line` links open the relevant code in VS Code
 - multiple flows (happy path, failure path) appear as tabs
+- successful builds are saved in local history; replay older versions from the VS Code **History** view
 - a **What to do next** card says where to make your change
 - it's one offline `index.html` with no server or account; commit it or send it to a teammate
 

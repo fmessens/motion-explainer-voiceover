@@ -2,7 +2,7 @@
   "name": "motion-explainer",
   "displayName": "Motion Explainer",
   "description": "Animated code walkthroughs from your coding agent, directly in VS Code.",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "local-motion",
   "license": "MIT",
   "engines": {"vscode": "^1.100.0"},
@@ -17,13 +17,21 @@
       {"command": "motionExplainer.sample", "title": "Motion Explainer: Open Sample"},
       {"command": "motionExplainer.refresh", "title": "Motion Explainer: Refresh Player", "icon": "$(refresh)"},
       {"command": "motionExplainer.output", "title": "Motion Explainer: Show Output", "icon": "$(output)"},
+      {"command": "motionExplainer.historyOpen", "title": "Motion Explainer: Replay History", "icon": "$(history)"},
+      {"command": "motionExplainer.historySources", "title": "Motion Explainer: View Saved Sources", "icon": "$(code)"},
+      {"command": "motionExplainer.historyDelete", "title": "Motion Explainer: Delete Saved Version", "icon": "$(trash)"},
       {"command": "motionExplainer.installSkills", "title": "Motion Explainer: Install Workspace Skills"},
       {"command": "motionExplainer.menu", "title": "Motion Explainer: Connection Menu"}
     ],
     "viewsContainers": {"activitybar": [{"id": "motionExplainer", "title": "Motion Explainer", "icon": "resources/motion.svg"}]},
-    "views": {"motionExplainer": [{"id": "motionExplainer.walkthroughs", "name": "Walkthroughs"}]},
+    "views": {"motionExplainer": [{"id": "motionExplainer.walkthroughs", "name": "Walkthroughs"}, {"id": "motionExplainer.history", "name": "History"}]},
     "viewsWelcome": [{"view": "motionExplainer.walkthroughs", "contents": "Ask your coding agent to use motion-explainer. Walkthroughs appear here after building.\n[Open Sample](command:motionExplainer.sample)\n[Install Workspace Skills](command:motionExplainer.installSkills)"}],
     "menus": {
+      "view/item/context": [
+        {"command": "motionExplainer.historyOpen", "when": "view == motionExplainer.history && viewItem == motionHistoryVersion", "group": "inline"},
+        {"command": "motionExplainer.historySources", "when": "view == motionExplainer.history && viewItem == motionHistoryVersion", "group": "navigation"},
+        {"command": "motionExplainer.historyDelete", "when": "view == motionExplainer.history && viewItem == motionHistoryVersion", "group": "navigation"}
+      ],
       "explorer/context": [{"command": "motionExplainer.build", "when": "resourceFilename == explainer.json || resourceExtname == .kymo", "group": "navigation"}, {"command": "motionExplainer.open", "when": "resourceFilename == index.html", "group": "navigation"}],
       "editor/title": [{"command": "motionExplainer.refresh", "when": "activeWebviewPanelId == motionExplainer.player", "group": "navigation"}, {"command": "motionExplainer.output", "when": "activeWebviewPanelId == motionExplainer.player", "group": "navigation"}]
     },

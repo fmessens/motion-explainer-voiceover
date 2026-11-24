@@ -16,6 +16,7 @@ import { parseKymo } from "./kymo-parse.mjs";
 import { renderKymo } from "./render.mjs";
 import { tagSvg } from "./tag-svg.mjs";
 import { validateSpec } from "./validate.mjs";
+import {captureHistory, isHistoryPath} from "./history.mjs";
 
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE = join(SKILL_DIR, "assets", "player.html");
@@ -39,8 +40,9 @@ function openInBrowser(file) {
   spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
 }
 
-export async function build(dir, { offline, strict, cache = true, portable = false } = {}) {
+export async function build(dir, { offline, strict, cache = true, portable = false, history = true } = {}) {
   dir = resolve(dir);
+  if (isHistoryPath(dir)) throw new Error("Saved history is read-only. Build the current walkthrough instead.");
   const specPath = join(dir, "explainer.json");
   if (!existsSync(specPath)) throw new Error(`no explainer.json in ${dir}`);
   let spec;
@@ -87,6 +89,7 @@ export async function build(dir, { offline, strict, cache = true, portable = fal
     edges: tagged.edges.map(({ key, src, dst, label }) => ({ key, src, dst, label })),
     warnings,
     root: portable ? "" : root,
+    diagramSource: source,
     engine,
     builtAt: new Date().toISOString(),
   };
@@ -96,6 +99,11 @@ export async function build(dir, { offline, strict, cache = true, portable = fal
     .replace("/*EXPLAINER_DATA*/null", () => scriptJson(data))
     .replace(/<title>[^<]*<\/title>/, () => `<title>${escapeHtml(spec.title)}</title>`);
   const outPath = join(dir, "index.html");
+  if (history && !portable && dir.split(/[\\/]/).includes("explainers")) {
+    try {await captureHistory(dir);}
+    catch (error) {if (error.code !== "INVALID_PLAYER" && !(error instanceof SyntaxError)) throw error;}
+    await captureHistory(dir, html);
+  }
   await writeFile(outPath, html);
 
   const steps = spec.flows.reduce((n, f) => n + f.steps.length, 0);

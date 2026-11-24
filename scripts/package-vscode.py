@@ -21,6 +21,8 @@ with ZipFile(out, 'w', ZIP_DEFLATED) as archive:
     archive.write(root / 'LICENSE', 'extension/LICENSE')
     archive.write(root / 'AUTHORS.md', 'extension/AUTHORS.md')
     for file in sorted((root / 'skills/motion-explainer').rglob('*')):
+        if '.history' in file.parts:
+            continue
         if file.is_file(): archive.write(file, 'extension/skill/' + file.relative_to(root / 'skills/motion-explainer').as_posix())
 with ZipFile(out) as archive:
     for name in archive.namelist():

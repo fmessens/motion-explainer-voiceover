@@ -130,6 +130,33 @@ Review them before sharing. Local test screenshots in `trial-results/` and
 build packages in `vscode/output/` are excluded from Git; publish only the
 reviewed VSIX as the release asset.
 
+## Walkthrough history
+
+Successful builds under `explainers/` automatically save a snapshot in that
+walkthrough's `.history/` directory. A snapshot contains the standalone HTML
+player, narration JSON, rendered SVG and original Kymo source when available.
+Identical content is saved once; invalid builds do not create versions.
+
+Open **Motion → History**, expand a walkthrough, and click a dated version to
+replay it in a separate tab. The current walkthrough stays unchanged and can
+continue updating. Right-click a version to **View Saved Sources** or
+**Delete Saved Version**. Deletion asks for confirmation and leaves the current
+walkthrough intact. Deleted content is remembered so restarting does not
+silently import it again.
+
+History spans the projects in the open workspace and is stored locally.
+Each `.history/` directory ignores its contents in Git automatically. Snapshots
+may contain source excerpts and architecture, so review them before sharing.
+There is no automatic retention limit in this first version; delete unwanted
+versions manually. Browser-only users get the same snapshots and can open a
+saved version's `index.html` directly.
+
+On startup, the extension seeds history from existing saved players. It cannot
+recover overwritten versions. Legacy players without embedded Kymo source keep
+their HTML, rendered diagram and narration; a current, possibly changed diagram
+is never substituted for the original. Code links refer to live project files,
+whose line numbers may have changed since the version was saved.
+
 ## Troubleshooting
 
 - **Commands missing:** reload the window, check the extension is enabled in the

@@ -57,7 +57,7 @@ function isOurs(path) {
 }
 
 // Generated players in examples/ are large and rebuildable; don't ship them.
-const filter = (src) => !(basename(src) === "index.html" && src.includes(`${join("examples", "")}`));
+const filter = (src) => !src.split(/[\\/]/).includes(".history") && !(basename(src) === "index.html" && src.includes(`${join("examples", "")}`));
 
 let failed = false;
 for (const parent of dests) {

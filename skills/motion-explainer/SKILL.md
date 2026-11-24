@@ -54,6 +54,12 @@ When the Motion Explainer VS Code extension is installed, it watches
 
 ## Updating an existing explainer
 
+Successful builds under `explainers/` save local `.history/` snapshots, skipping
+identical content. The VS Code History view replays versions independently of
+the current player. Do not edit or rebuild a snapshot, and do not commit history
+or copy it into the installed skill. Keep using the current walkthrough folder
+for follow-ups; the builder preserves prior versions automatically.
+
 Edit `explainer.json` or `diagram.kymo` in place and rerun the build. Never hand-edit `index.html` or `diagram.svg`; both are generated.
 
 ## Rendering details

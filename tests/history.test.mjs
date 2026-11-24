@@ -1,0 +1,97 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {mkdtemp, mkdir, cp, readFile, writeFile, rm, symlink, readdir} from "node:fs/promises";
+import {join} from "node:path";
+import {execFile} from "node:child_process";
+import {promisify} from "node:util";
+import {fileURLToPath} from "node:url";
+import {build} from "../skills/motion-explainer/scripts/build.mjs";
+import {captureHistory, listHistory, snapshotFiles, deleteSnapshot} from "../skills/motion-explainer/scripts/history.mjs";
+import {sourceLocation} from "../vscode/runtime.mjs";
+const root = fileURLToPath(new URL("../", import.meta.url));
+const run = promisify(execFile);
+async function fixture(t) {
+  const workspace = await mkdtemp("/tmp/motion-history-test-");
+  t.after(() => rm(workspace, {recursive: true, force: true}));
+  await run("git", ["init", "--quiet", workspace]);
+  const directory = join(workspace, "explainers/orders");
+  await mkdir(join(workspace, "explainers"));
+  await cp(join(root, "skills/motion-explainer/examples/order-queue"), directory, {recursive: true});
+  await rm(join(directory, "index.html"), {force: true});
+  await writeFile(join(workspace, "app.js"), "first\nsecond\n");
+  return {workspace, directory};
+}
+
+test("successful builds preserve old players and sources, skip unchanged builds and ignore failed builds", async t => {
+  const {workspace, directory} = await fixture(t);
+  assert.equal((await build(directory, {offline: true, strict: true})).ok, true);
+  const first = (await listHistory(directory))[0], files = await snapshotFiles(directory, first.id);
+  assert.equal(first.hasDiagram, true);
+  assert.equal(await readFile(files.diagram, "utf8"), await readFile(join(directory, "diagram.kymo"), "utf8"));
+  const oldHtml = await readFile(files.html, "utf8");
+  await build(directory, {offline: true, strict: true});
+  assert.equal((await listHistory(directory)).length, 1);
+  const spec = JSON.parse(await readFile(join(directory, "explainer.json"), "utf8"));
+  spec.flows[0].steps[0].say = "A follow-up explains the transaction boundary.";
+  await writeFile(join(directory, "explainer.json"), JSON.stringify(spec));
+  assert.equal((await build(directory, {offline: true, strict: true})).ok, true);
+  const entries = await listHistory(directory);
+  assert.equal(entries.length, 2);
+  assert.match(entries[0].summary, /Explanation updated/);
+  assert.equal(await readFile(files.html, "utf8"), oldHtml);
+  assert.ok(!(await readFile(files.spec, "utf8")).includes("A follow-up"));
+  assert.deepEqual(await sourceLocation(files.folder, {file: "app.js", line: 2}, [workspace]), {file: join(workspace, "app.js"), line: 2});
+  const current = await readFile(join(directory, "index.html"), "utf8");
+  spec.flows = [];
+  await writeFile(join(directory, "explainer.json"), JSON.stringify(spec));
+  assert.equal((await build(directory, {offline: true, strict: true})).ok, false);
+  assert.equal((await listHistory(directory)).length, 2);
+  assert.equal(await readFile(join(directory, "index.html"), "utf8"), current);
+  spec.flows = JSON.parse(current.match(/^const DATA = (.+);$/m)[1]).spec.flows;
+  await writeFile(join(directory, "explainer.json"), JSON.stringify(spec));
+  await writeFile(join(directory, "index.html"), "incomplete old output");
+  assert.equal((await build(directory, {offline: true, strict: true})).ok, true);
+  assert.equal((await listHistory(directory)).length, 2, "invalid old output must not become a version");
+  assert.equal((await run("git", ["check-ignore", join(files.folder, "index.html")], {cwd: workspace})).stdout.trim(), join(files.folder, "index.html"));
+  await assert.rejects(() => build(files.folder), /read-only/);
+});
+
+test("legacy players seed history from embedded data rather than subsequently edited sources", async t => {
+  const {directory} = await fixture(t);
+  await build(directory, {offline: true, strict: true, history: false});
+  let html = await readFile(join(directory, "index.html"), "utf8");
+  const data = JSON.parse(html.match(/^const DATA = (.+);$/m)[1]);
+  delete data.diagramSource;
+  html = html.replace(/^const DATA = (.+);$/m, () => `const DATA = ${JSON.stringify(data)};`);
+  await writeFile(join(directory, "index.html"), html);
+  await writeFile(join(directory, "explainer.json"), '{"title":"unsaved edit"}');
+  const metadata = await captureHistory(directory), files = await snapshotFiles(directory, metadata.id);
+  assert.equal(metadata.title, data.spec.title);
+  assert.equal(metadata.hasDiagram, false);
+  assert.equal(files.diagram, null);
+  assert.equal(JSON.parse(await readFile(files.spec, "utf8")).title, data.spec.title);
+  assert.match(await readFile(join(files.folder, "diagram.svg"), "utf8"), /<svg/);
+  assert.equal(await readFile(files.html, "utf8"), html);
+});
+
+test("simultaneous captures deduplicate; deleted versions stay deleted; paths and symlinks cannot escape history", async t => {
+  const {workspace, directory} = await fixture(t);
+  await build(directory, {offline: true, strict: true, history: false});
+  await Promise.all([captureHistory(directory), captureHistory(directory), captureHistory(directory)]);
+  assert.equal((await listHistory(directory)).length, 1);
+  const entry = (await listHistory(directory))[0];
+  await assert.rejects(() => deleteSnapshot(directory, "../.."), /Invalid history version/);
+  await deleteSnapshot(directory, entry.id);
+  assert.equal((await listHistory(directory)).length, 0);
+  assert.equal(await captureHistory(directory), null);
+  assert.equal((await listHistory(directory)).length, 0);
+  assert.ok(await readFile(join(directory, "index.html"), "utf8"));
+  const outside = join(workspace, "outside"); await mkdir(outside);
+  const id = "a".repeat(32);
+  await symlink(outside, join(directory, ".history", id));
+  await assert.rejects(() => deleteSnapshot(directory, id), /Invalid history directory/);
+  await rm(join(directory, ".history"), {recursive: true});
+  await symlink(outside, join(directory, ".history"));
+  await assert.rejects(() => captureHistory(directory), /not a symlink/);
+  assert.deepEqual(await readdir(outside), []);
+});

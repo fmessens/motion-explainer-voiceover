@@ -20,6 +20,13 @@ File events open newly built walkthroughs automatically. A metadata check every
 two seconds also detects updates when remote workspace watchers miss an event.
 Existing files stay silent at startup. Output logs discovery and detected updates.
 
+The **History** view groups saved versions by walkthrough and project. Each
+successful build snapshots the player and its sources locally; unchanged
+content is not duplicated. Replay opens a separate, initially paused tab without
+replacing the current explanation. A version's context menu offers saved source
+copies and confirmed deletion. Existing players seed their first version on
+startup. History is excluded from Git and from the extension package.
+
 When playback is stopped or paused, drag or scroll the canvas to pan. Use the
 zoom buttons or Ctrl+scroll to zoom, and Fit to reset. With the diagram focused,
 arrow keys pan, +/− zoom and 0 fits. Playback resumes camera tracking; focused
