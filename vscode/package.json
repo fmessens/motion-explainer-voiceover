@@ -2,7 +2,7 @@
   "name": "motion-explainer",
   "displayName": "Motion Explainer",
   "description": "Animated code walkthroughs from your coding agent, directly in VS Code.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "local-motion",
   "license": "MIT",
   "engines": {"vscode": "^1.100.0"},

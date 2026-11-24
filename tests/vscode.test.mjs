@@ -21,6 +21,11 @@ async function fixture(t) {
   await cp(join(root, "skills/motion-explainer"), join(extension, "skill"), {recursive: true});
   await cp(join(root, "vscode/runtime.mjs"), join(extension, "runtime.mjs"));
   await cp(join(root, "skills/motion-explainer/examples/order-queue"), directory, {recursive: true});
+  // Generated HTML is not committed. Fixtures must work on a clean checkout,
+  // including when the release workflow tests before packaging examples.
+  for (const target of [directory, join(extension, "skill/examples/order-queue")]) {
+    assert.equal((await build(target, {offline: true, strict: true})).ok, true);
+  }
   await writeFile(join(workspace, "app.js"), "first\nsecond\nthird\n");
   return {temporary, workspace, extension, directory, index: join(directory, "index.html")};
 }
