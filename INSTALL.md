@@ -1,13 +1,27 @@
-# Install Motion Explainer in VS Code
+# Set up Motion Explainer Voiceover
 
 Based on **[Bilal Tahseen's Motion Explainer](https://github.com/bilaltahseen/motion-explainer)**
 and its upstream contributors' work. This fork adds VS Code integration,
 voiceover and canvas navigation. See [credits](AUTHORS.md) and the original
 [MIT license](LICENSE).
 
-Motion Explainer contains both the animated player and voiceover. Install one
-extension, then give your coding agent the bundled skill. No MCP server or
-background web service is required.
+Motion Explainer contains both the animated player and voiceover. Use it in a
+browser, or install the optional VS Code extension and give your coding agent
+the bundled skill. No MCP server or background web service is required.
+
+## Browser player
+
+From a checkout, build a walkthrough and open it in your default browser:
+
+```bash
+node skills/motion-explainer/scripts/build.mjs skills/motion-explainer/examples/order-queue --offline --open
+```
+
+Press **Play** with **Voiceover** enabled. A generated `index.html` also opens
+directly in a desktop browser; no extension is needed. For your own code,
+install the agent skill as described below, then ask your agent to build with
+`--offline --open`. If the VS Code extension is installed and you want only
+the browser, set `motionExplainer.autoOpen` to `false`.
 
 ## 1. Install the extension
 

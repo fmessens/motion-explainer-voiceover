@@ -1,19 +1,27 @@
-# Motion Explainer for VS Code
+# Motion Explainer Voiceover
 
-**Ask your coding agent how something works, and watch it run.**
+**Animated code explanations with voiceover, in your browser or VS Code.**
 
 This fork of [bilaltahseen/motion-explainer](https://github.com/bilaltahseen/motion-explainer)
-adds a native VS Code player, automatic walkthrough updates, browser/system
-voiceover, and paused canvas navigation. The upstream agent skill and MIT
+adds browser/system voiceover and paused canvas navigation to the standalone
+HTML player. It also includes a **VS Code extension** with a native player and
+automatic walkthrough updates. The upstream agent skill and MIT
 attribution are preserved. The original Motion Explainer was created by
 **[Bilal Tahseen](https://github.com/bilaltahseen)**; credit belongs to him and
 the [upstream contributors](https://github.com/bilaltahseen/motion-explainer/graphs/contributors)
 for the original skill, player, examples and documentation. See [credits](AUTHORS.md).
 
-**[Install in VS Code, enable voiceover, and connect your coding agent →](INSTALL.md)**
-Voiceover is included in the Motion Explainer extension; no separate speech
-extension or paid speech API is required. This is a sideloaded VSIX, not a
-Marketplace installation.
+**[Browser and VS Code setup instructions →](INSTALL.md)**
+Voiceover is built into both players; no separate speech extension or paid
+speech API is required. The optional VS Code extension installs from a VSIX.
+
+Try the browser player from a checkout (Node.js 18 or newer):
+
+```bash
+git clone https://github.com/fmessens/motion-explainer-voiceover.git
+cd motion-explainer-voiceover
+node skills/motion-explainer/scripts/build.mjs skills/motion-explainer/examples/order-queue --offline --open
+```
 
 <p align="center">
   <img src="docs/how-it-works.svg" alt="Animated diagram: you ask a coding agent a question; it reads your codebase, writes diagram.kymo and explainer.json; build.mjs renders the diagram with Kymo and produces an animated, offline index.html" width="860">
