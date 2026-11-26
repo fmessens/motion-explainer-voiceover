@@ -7,6 +7,11 @@ import { join } from "node:path";
 const PLACEHOLDER_RE = /\b(TODO|TBD|FIXME|lorem ipsum)\b|<(your|insert|describe|add|some)\b[^>]*>|\.\.\.$/i;
 const MAX_NODES = 14;
 const MAX_STEPS = 12;
+const IMPORTANCE = ["changed", "core", "supporting", "context"];
+// Upper-case words that are not abbreviations a reader needs expanded, or the rule operators.
+const COMMON_ABBR = new Set(["IF", "THEN", "ELSE", "AND", "OR", "NOT", "UNLESS", "OK", "ID", "URL", "API", "HTTP", "HTTPS", "JSON", "POST", "GET", "PUT", "DELETE", "PATCH", "UI", "CLI", "AFTER", "BEFORE", "NOTE", "WHEN", "WHY", "WHAT", "NEW",
+  "HTML", "CSS", "SQL", "SELECT", "INSERT", "UPDATE", "SET", "DEL"]);  // commands and everyday web terms
+// Longer upper-case words are emphasis (BLOCKING), not abbreviations; the regex stops at 6 characters.
 
 /**
  * @param {object} spec    parsed explainer.json
@@ -74,6 +79,41 @@ export function validateSpec(spec, model, root) {
       if (ref.file && !existsSync(join(root, ref.file))) warnings.push(`nodes.${id}: code ref ${ref.file} not found under ${root}`);
     }
   }
+  // Rules: plain strings, or { if, then, else? }, at the top level, per flow, per step or per node.
+  const checkRules = (where, rules) => {
+    if (rules == null) return;
+    if (!Array.isArray(rules)) return errors.push(`${where}: \`rules\` must be an array`);
+    rules.forEach((r, i) => {
+      if (typeof r === "string") return;
+      if (!r || typeof r.if !== "string" || typeof r.then !== "string") errors.push(`${where}.rules[${i}]: needs \`if\` and \`then\` strings (or be a plain string)`);
+    });
+  };
+  checkRules("spec", spec.rules);
+  (spec.flows || []).forEach((f, fi) => { checkRules(`flows[${fi}]`, f.rules); (f.steps || []).forEach((s, si) => checkRules(`flows[${fi}].steps[${si}]`, s.rules)); });
+  for (const [id, info] of Object.entries(spec.nodes || {})) {
+    checkRules(`nodes.${id}`, info.rules);
+    if (info.importance != null && !IMPORTANCE.includes(info.importance)) errors.push(`nodes.${id}.importance must be one of ${IMPORTANCE.join(", ")}`);
+  }
+  if (spec.glossary != null && (typeof spec.glossary !== "object" || Array.isArray(spec.glossary))) errors.push("`glossary` must be an object { ABBR: \"expansion and what it is here\" }");
+
+  // Every abbreviation a reader sees should be expanded in `glossary` (shown as footnotes, not in the narration).
+  const texts = [spec.title, spec.summary];
+  (spec.flows || []).forEach((f) => { texts.push(f.label, f.description); (f.rules || []).forEach((r) => texts.push(JSON.stringify(r))); (f.steps || []).forEach((s) => texts.push(s.say, s.title, s.packet?.label, JSON.stringify(s.rules || []))); });
+  for (const info of Object.values(spec.nodes || {})) texts.push(info.desc, info.role, info.subtitle, JSON.stringify(info.rules || []));
+  (spec.rules || []).forEach((r) => texts.push(JSON.stringify(r)));
+  for (const n of model.nodes) texts.push(n.label, n.subtitle);
+  const defined = new Set(Object.keys(spec.glossary || {}));
+  const missing = new Set();
+  for (const t of texts) {
+    if (typeof t !== "string") continue;
+    const plain = t.replace(/`[^`]*`/g, " ");   // code spans are identifiers, not prose
+    for (const m of plain.matchAll(/\b[A-Z][A-Z0-9]{1,5}s?\b/g)) {
+      const w = m[0].replace(/s$/, "");
+      if (!COMMON_ABBR.has(w) && !defined.has(w) && !/^\d/.test(w)) missing.add(w);
+    }
+  }
+  if (missing.size) warnings.push(`abbreviations not explained in \`glossary\`: ${[...missing].sort().join(", ")}`);
+
   if (!Array.isArray(spec.next) || spec.next.length === 0) {
     warnings.push("no `next` actions — tell the reader what to change and where");
   } else spec.next.forEach((n, i) => placeholder(`next[${i}]`, typeof n === "string" ? n : n.text));
