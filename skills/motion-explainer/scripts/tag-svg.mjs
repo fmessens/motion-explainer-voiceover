@@ -10,6 +10,7 @@ const NODE_LABEL_RE = /<text class="label" x="(-?[\d.]+)" y="(-?[\d.]+)">([^<]*)
 const EDGE_PATH_RE = /<path d="([^"]+)"([^>]*?)\/>/g;
 const EDGE_LABEL_RE = /<text class="elabel" x="(-?[\d.]+)" y="(-?[\d.]+)">([^<]*)<\/text>/g;
 const PAIR_OFFSET = 7; // px each direction of a reverse pair is pushed sideways
+const MAX_END_DISTANCE = 160; // px from a node's centre an edge's end may lie (node, label, subtitle, gap)
 
 const GRADIENTS = {
   "g-face-front": ["#a3e635", "#65a30d"],
@@ -96,10 +97,20 @@ export function tagSvg(svg, model) {
       const d = p[1];
       if (!isPairPath(d)) return warnings.push(`edge path #${i + 1} uses relative/arc commands — left untagged`);
       const { start, end } = pathPoints(d);
-      const src = nearest(start);
-      const dst = nearest(end);
-      const k = pending.findIndex((e) => !e.used && e.src === src && e.dst === dst);
-      if (k < 0) return warnings.push(`edge path #${i + 1} (${src} → ${dst}) has no matching edge in the .kymo`);
+      // Score every declared edge by how well both ends fit, rather than snapping each end to its
+      // nearest node: a path leaves below a node's label, so between closely stacked nodes its start
+      // can sit nearer the next node's centre than its own.
+      const dist = (id, [x, y]) => Math.hypot(nodes[id].x - x, nodes[id].y - y);
+      let k = -1, best = Infinity;
+      pending.forEach((e, j) => {
+        if (e.used || !nodes[e.src] || !nodes[e.dst]) return;
+        const score = dist(e.src, start) + dist(e.dst, end);
+        if (score < best) [k, best] = [j, score];
+      });
+      // Both ends should be within reach of their nodes; anything further is a path we can't place.
+      if (k >= 0 && best > 2 * MAX_END_DISTANCE) k = -1;
+      if (k < 0) return warnings.push(`edge path #${i + 1} (${nearest(start)} → ${nearest(end)}) has no matching edge in the .kymo`);
+      const { src, dst } = pending[k];
       pending[k].used = true;
       const base = `${src}->${dst}`;
       seen[base] = (seen[base] || 0) + 1;
