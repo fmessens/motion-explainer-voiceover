@@ -162,6 +162,12 @@
   .gloss { margin: 0; padding: 6px 12px 10px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; font-size: 12.5px; }
   .gloss dt { font: 650 12px var(--mono); color: var(--ink); }
   .gloss dd { margin: 0; color: var(--muted); }
+  .compare-wrap { overflow-x: auto; }
+  .compare { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .compare th, .compare td { padding: 7px 10px; text-align: left; vertical-align: top; border-top: 1px solid var(--line); }
+  .compare thead th { border-top: 0; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .compare tbody th { font-weight: 600; color: var(--ink); min-width: 110px; }
+  .compare td { color: var(--ink); }
   .pieces { display: flex; flex-direction: column; gap: 10px; }
   .pieces .tier { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
   .pieces .tier.changed { color: var(--packet); }
@@ -320,6 +326,13 @@ const DATA = /*EXPLAINER_DATA*/null;
     const used = all ? GLOSSARY : GLOSSARY.filter(([t]) => glossRe(t).test(text));
     if (!used.length) return "";
     return `<div class="card"><h3>Abbreviations</h3><dl class="gloss">${used.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${md(d)}</dd>`).join("")}</dl></div>`;
+  }
+  // A before/after (or option A/B) table: the summary a reader would otherwise rebuild in their head.
+  function compareHtml(c) {
+    if (!c?.columns?.length || !c.rows?.length) return "";
+    const head = `<tr><th></th>${c.columns.map((h) => `<th>${md(h)}</th>`).join("")}</tr>`;
+    const body = c.rows.map(([name, ...cells]) => `<tr><th>${md(name)}</th>${cells.map((v) => `<td>${opsMd(v)}</td>`).join("")}</tr>`).join("");
+    return `<div class="card"><h3>${esc(c.title || "Compared")}</h3><div class="compare-wrap"><table class="compare"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
   }
   const TIERS = [["changed", "Changed by this change"], ["core", "Core of the flow"], ["supporting", "Supporting"], ["context", "Context"]];
   function piecesHtml() {
@@ -554,6 +567,8 @@ const DATA = /*EXPLAINER_DATA*/null;
         <p class="muted">Press <strong>▶</strong> to watch it run, or step with <code>→</code>.</p>
         ${rulesHtml(flow.rules, "Rules in this flow")}
         ${state.flow === 0 || !flow.rules?.length ? rulesHtml(spec.rules) : ""}
+        ${compareHtml(flow.compare)}
+        ${state.flow === 0 ? compareHtml(spec.compare) : ""}
         ${piecesHtml()}
         ${glossaryHtml("", true)}`;
       void nodes;
@@ -577,6 +592,7 @@ const DATA = /*EXPLAINER_DATA*/null;
       ${packet}
       ${rulesHtml(step.rules, "Rule at this step")}
       ${refsHtml(step.code)}
+      ${state.step === total ? compareHtml(flow.compare || spec.compare) : ""}
       ${state.step === total ? nextHtml() : ""}`;
     panel.insertAdjacentHTML("beforeend", glossaryHtml(panel.textContent));
   }

@@ -29,6 +29,14 @@ An animation shows one path; real systems branch. Put the branching in `rules`:
 
 The reader may be new to the domain or the team. Every abbreviation (STS, KMS, OPA, JWKS, team-internal ones too) goes in `glossary` with its expansion **and what it is here**. Keep `say` readable: never expand inline. Never invent your own abbreviation for a name (write "Governance Control Plane", not "GCP"). The build warns about any abbreviation without a glossary entry.
 
+## Explaining a change: end with before and after
+
+When the explainer is about a change (a merge request, a migration, a decision between options), the reader's last question is "so what is different?". Answer it with `compare` instead of leaving them to rebuild it:
+
+- Columns are the states: `Before`, `After this change`, and a column for each later step that someone else still has to take (another team's change, a rotation). A change rarely lands in one step, and the table should show that.
+- Rows are the questions a reader asks: who signs in as what, what proves it, what is stored, who checks it, what fails if it breaks.
+- Label the steps that show the old and the new path with `BEFORE:` and `AFTER:` in their `title`, so the two paths are easy to tell apart.
+
 ## Pick the flows
 
 - A flow is one scenario from trigger to visible outcome: "Log in", "Checkout", "Webhook arrives", "Cache miss".
@@ -58,4 +66,6 @@ Avoid generic advice ("write tests", "follow best practices").
 - Does every step's narration fit in about 8 seconds of reading?
 - Does every node have an `importance` and a `role`, and are all the services on the path present?
 - Can a reader answer "when is X used instead of Y?" from `rules` alone?
+- For a change: does `compare` answer "what is different, and what is still to come?"
+
 - Did the build report no unexplained abbreviations?

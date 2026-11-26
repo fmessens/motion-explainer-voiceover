@@ -30,6 +30,7 @@ You turn "how does X work?" into a short animated walkthrough. You read the code
    - Give every node an `importance` and a `role`, and include every service on the path (identity, secrets, jobs). For a change, start with a "The parts" flow.
    - Write the branching as `rules` (`IF … AND/OR … THEN … ELSE …`) at the top, per flow and per step.
    - Put every abbreviation in `glossary` (footnotes), never inline in `say`.
+   - For a change, add a `compare` table: before, after, and any later steps by others.
 
 5. **Build:**
    ```bash

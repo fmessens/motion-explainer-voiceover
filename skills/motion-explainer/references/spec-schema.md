@@ -18,6 +18,15 @@
     "Plain strings work too. Write AND / OR / NOT / UNLESS in capitals: they get a badge"
   ],
 
+  "compare": {                                // optional: a before/after (or A/B) table. Shown on the first
+    "title": "Before vs after",               // flow's overview and on the last step of every flow
+    "columns": ["Before", "After this change", "After the follow-up"],
+    "rows": [                                 // each row: its name, then one cell per column
+      ["Who signs in", "their app, with a copied secret", "our app, no secret", "same"],
+      ["Who checks the caller", "nobody", "nobody yet", "the gateway, by role"]
+    ]
+  },
+
   "nodes": {                                  // optional: per-node detail, shown when a node is clicked
     "api": {
       "importance": "changed",                // changed | core | supporting | context. Groups the overview's
@@ -36,6 +45,7 @@
       "label": "Log in",                      // required: tab text
       "description": "Shown on this flow's overview step.",
       "rules": [ … ],                         // optional: rules for this flow, shown on its overview
+      "compare": { … },                       // optional: this flow's table, shown on its overview and last step
       "steps": [                              // required: 1–12 (aim for 4–10)
         {
           "edge": "spa->api",                 // a hop: the packet travels this edge. Use node ids from the .kymo.
@@ -83,4 +93,5 @@
 - no `next`
 - an upper-case abbreviation (2–6 characters) in the visible text or the diagram labels that `glossary` doesn't explain. Text in `code spans` is ignored.
 - malformed `rules` (each needs `if` + `then`, or is a string) or an unknown `importance` are errors
+- a malformed `compare` (each row must have the row's name plus one cell per column) is an error
 - Kymo quirks: region edges, named layout containers, nodes or edges missing from the SVG
