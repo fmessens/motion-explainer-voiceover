@@ -153,6 +153,24 @@
   .legend button { padding: 3px 9px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; }
   .legend button:hover { border-color: var(--accent); }
   .muted { color: var(--muted); }
+  .rules { list-style: none; margin: 0; padding: 6px 0; }
+  .rules li { padding: 7px 12px; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; border-top: 1px solid var(--line); }
+  .rules li:first-child { border-top: 0; }
+  .rules .kw { font: 700 11px var(--mono); letter-spacing: .04em; color: var(--accent); }
+  .rules .then { grid-column: 2; }
+  .rules .op { font: 700 11px var(--mono); color: var(--packet-ink); background: var(--packet); padding: 0 5px; border-radius: 4px; margin: 0 2px; }
+  .gloss { margin: 0; padding: 6px 12px 10px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .gloss dt { font: 650 12px var(--mono); color: var(--ink); }
+  .gloss dd { margin: 0; color: var(--muted); }
+  .pieces { display: flex; flex-direction: column; gap: 10px; }
+  .pieces .tier { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+  .pieces .tier.changed { color: var(--packet); }
+  .pieces ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .pieces li { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 8px; align-items: baseline; font-size: 13px; }
+  .pieces li button { text-align: left; font-weight: 600; color: var(--accent); padding: 0; }
+  .pieces li .role { color: var(--muted); }
+  .stage svg [data-node].me-changed { filter: drop-shadow(0 0 7px var(--packet)); }
+  .stage svg .me-badge { font: 700 10px var(--mono); fill: var(--packet); }
   .back { align-self: flex-start; color: var(--accent); font-weight: 600; font-size: 13px; }
 
   /* Transport */
@@ -285,6 +303,34 @@ const DATA = /*EXPLAINER_DATA*/null;
   const edgeLabelEl = (key) => svg.querySelector(`[data-edge-label="${CSS.escape(key)}"]`);
   const label = (id) => DATA.nodes[id]?.label || spec.nodes?.[id]?.label || id;
 
+  // Rules: "IF … AND … OR …" text. Upper-case operators get a badge so the logic reads at a glance.
+  const OPS_RE = /\b(AND|OR|NOT|UNLESS|ELSE)\b/g;
+  const opsMd = (s) => md(s).replace(OPS_RE, '<span class="op">$1</span>');
+  function rulesHtml(rules, heading = "Rules: what is used when") {
+    if (!rules?.length) return "";
+    const items = rules.map((r) => typeof r === "string"
+      ? `<li><span class="kw">•</span><span>${opsMd(r)}</span></li>`
+      : `<li><span class="kw">IF</span><span>${opsMd(r.if)}</span><span class="kw">THEN</span><span>${opsMd(r.then)}</span>${r.else ? `<span class="kw">ELSE</span><span>${opsMd(r.else)}</span>` : ""}</li>`);
+    return `<div class="card"><h3>${esc(heading)}</h3><ul class="rules">${items.join("")}</ul></div>`;
+  }
+  // Abbreviations as footnotes: only the ones the visible panel actually uses.
+  const GLOSSARY = Object.entries(spec.glossary || {});
+  const glossRe = (t) => new RegExp(`(^|[^A-Za-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9])`);
+  function glossaryHtml(text, all = false) {
+    const used = all ? GLOSSARY : GLOSSARY.filter(([t]) => glossRe(t).test(text));
+    if (!used.length) return "";
+    return `<div class="card"><h3>Abbreviations</h3><dl class="gloss">${used.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${md(d)}</dd>`).join("")}</dl></div>`;
+  }
+  const TIERS = [["changed", "Changed by this change"], ["core", "Core of the flow"], ["supporting", "Supporting"], ["context", "Context"]];
+  function piecesHtml() {
+    const ids = Object.keys(DATA.nodes);
+    const tierOf = (id) => spec.nodes?.[id]?.importance || "core";
+    const hasTiers = ids.some((id) => spec.nodes?.[id]?.importance || spec.nodes?.[id]?.role);
+    if (!hasTiers) return `<div><div class="eyebrow" style="margin-bottom:8px">Pieces</div><div class="legend">${ids.map((id) => `<button data-node-jump="${esc(id)}">${esc(label(id))}</button>`).join("")}</div></div>`;
+    const groups = TIERS.map(([t, name]) => [t, name, ids.filter((id) => tierOf(id) === t)]).filter(([, , l]) => l.length);
+    return `<div class="pieces"><div class="eyebrow">Every component, by importance</div>${groups.map(([t, name, l]) => `<div><p class="tier ${t}">${esc(name)}</p><ul>${l.map((id) => `<li><button data-node-jump="${esc(id)}">${esc(label(id))}</button><span class="role">${md(spec.nodes?.[id]?.role || "")}</span></li>`).join("")}</ul></div>`).join("")}</div>`;
+  }
+
   // Kymo's JS renderer drops subtitles; draw them under the labels.
   for (const [id, n] of Object.entries(DATA.nodes)) {
     const sub = spec.nodes?.[id]?.subtitle ?? n.subtitle;
@@ -297,6 +343,19 @@ const DATA = /*EXPLAINER_DATA*/null;
     t.setAttribute("y", Number(lab.getAttribute("y")) + 15);
     t.textContent = sub;
     lab.after(t);
+  }
+  for (const id of Object.keys(DATA.nodes)) {
+    if (spec.nodes?.[id]?.importance !== "changed") continue;
+    nodeEl(id)?.classList.add("me-changed");
+    const lab = nodeLabelEl(id);
+    if (!lab) continue;
+    const b = document.createElementNS(NS, "text");
+    b.setAttribute("class", "me-badge");
+    b.setAttribute("text-anchor", "middle");
+    b.setAttribute("x", lab.getAttribute("x"));
+    b.setAttribute("y", Number(lab.getAttribute("y")) + (spec.nodes?.[id]?.subtitle ?? DATA.nodes[id].subtitle ? 29 : 15));
+    b.textContent = "CHANGED";
+    lab.parentNode.insertBefore(b, svg.querySelector(`[data-sub="${CSS.escape(id)}"]`)?.nextSibling || lab.nextSibling);
   }
 
   // Include labels and subtitles, even where they extend beyond Kymo's canvas.
@@ -493,7 +552,11 @@ const DATA = /*EXPLAINER_DATA*/null;
         ${spec.summary ? `<p class="say">${md(spec.summary)}</p>` : ""}
         ${flow.description ? `<p class="summary">${md(flow.description)}</p>` : ""}
         <p class="muted">Press <strong>▶</strong> to watch it run, or step with <code>→</code>.</p>
-        <div><div class="eyebrow" style="margin-bottom:8px">Pieces</div><div class="legend">${nodes.map((id) => `<button data-node-jump="${esc(id)}">${esc(label(id))}</button>`).join("")}</div></div>`;
+        ${rulesHtml(flow.rules, "Rules in this flow")}
+        ${state.flow === 0 || !flow.rules?.length ? rulesHtml(spec.rules) : ""}
+        ${piecesHtml()}
+        ${glossaryHtml("", true)}`;
+      void nodes;
       return;
     }
     const step = flow.steps[state.step - 1];
@@ -512,8 +575,10 @@ const DATA = /*EXPLAINER_DATA*/null;
       ${step.title ? `<div class="hop">${md(step.title)}</div>` : hop}
       <p class="say">${md(step.say)}</p>
       ${packet}
+      ${rulesHtml(step.rules, "Rule at this step")}
       ${refsHtml(step.code)}
       ${state.step === total ? nextHtml() : ""}`;
+    panel.insertAdjacentHTML("beforeend", glossaryHtml(panel.textContent));
   }
 
   function renderNodeDetail(id) {
@@ -526,8 +591,10 @@ const DATA = /*EXPLAINER_DATA*/null;
       <div class="eyebrow">Component</div>
       <div class="hop"><span class="chip">${esc(label(id))}</span>${n.subtitle || info.subtitle ? `<span class="muted">${esc(info.subtitle || n.subtitle)}</span>` : ""}</div>
       ${info.desc ? `<p class="say node-desc">${md(info.desc)}</p>` : `<p class="muted">No description for this component.</p>`}
+      ${rulesHtml(info.rules, "When it is used")}
       ${refsHtml(info.code)}
       ${usedIn.length ? `<div class="card"><h3>Appears in</h3><ul class="refs">${usedIn.map(([fi, si, s]) => `<li><a href="#${esc(flows[fi].id)}/${si}" data-goto="${fi}:${si}">${esc(flows[fi].label)} · step ${si}</a><span class="note">${esc((s.say || "").slice(0, 60))}${(s.say || "").length > 60 ? "…" : ""}</span></li>`).join("")}</ul></div>` : ""}`;
+    panel.insertAdjacentHTML("beforeend", glossaryHtml(panel.textContent));
   }
 
   // ── Chrome ───────────────────────────────────────────────────────────

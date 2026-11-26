@@ -27,6 +27,9 @@ You turn "how does X work?" into a short animated walkthrough. You read the code
    - Give packets realistic but trimmed payloads, with no real secrets.
    - Include `code` refs with real `file` + `line`, relative to the repo root.
    - Add 2–4 `next` actions that answer the user's actual goal.
+   - Give every node an `importance` and a `role`, and include every service on the path (identity, secrets, jobs). For a change, start with a "The parts" flow.
+   - Write the branching as `rules` (`IF … AND/OR … THEN … ELSE …`) at the top, per flow and per step.
+   - Put every abbreviation in `glossary` (footnotes), never inline in `say`.
 
 5. **Build:**
    ```bash
