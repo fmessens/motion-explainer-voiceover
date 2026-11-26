@@ -89,6 +89,18 @@ export function validateSpec(spec, model, root) {
     });
   };
   checkRules("spec", spec.rules);
+  // Compare: { title?, columns: [header…], rows: [[row name, cell per column]…] }, top level or per flow.
+  const checkCompare = (where, c) => {
+    if (c == null) return;
+    const strings = (a) => Array.isArray(a) && a.length > 0 && a.every((s) => typeof s === "string");
+    if (typeof c !== "object" || !strings(c.columns)) return errors.push(`${where}.compare: needs \`columns\`, a non-empty array of strings`);
+    if (!Array.isArray(c.rows) || !c.rows.length) return errors.push(`${where}.compare: needs \`rows\`, a non-empty array`);
+    c.rows.forEach((r, i) => {
+      if (!strings(r) || r.length !== c.columns.length + 1) errors.push(`${where}.compare.rows[${i}]: must be ${c.columns.length + 1} strings, the row's name and one cell per column`);
+    });
+  };
+  checkCompare("spec", spec.compare);
+  (spec.flows || []).forEach((f, fi) => checkCompare(`flows[${fi}]`, f.compare));
   (spec.flows || []).forEach((f, fi) => { checkRules(`flows[${fi}]`, f.rules); (f.steps || []).forEach((s, si) => checkRules(`flows[${fi}].steps[${si}]`, s.rules)); });
   for (const [id, info] of Object.entries(spec.nodes || {})) {
     checkRules(`nodes.${id}`, info.rules);
@@ -101,6 +113,7 @@ export function validateSpec(spec, model, root) {
   (spec.flows || []).forEach((f) => { texts.push(f.label, f.description); (f.rules || []).forEach((r) => texts.push(JSON.stringify(r))); (f.steps || []).forEach((s) => texts.push(s.say, s.title, s.packet?.label, JSON.stringify(s.rules || []))); });
   for (const info of Object.values(spec.nodes || {})) texts.push(info.desc, info.role, info.subtitle, JSON.stringify(info.rules || []));
   (spec.rules || []).forEach((r) => texts.push(JSON.stringify(r)));
+  for (const c of [spec.compare, ...(spec.flows || []).map((f) => f.compare)]) if (c) texts.push(JSON.stringify(c));
   for (const n of model.nodes) texts.push(n.label, n.subtitle);
   const defined = new Set(Object.keys(spec.glossary || {}));
   const missing = new Set();
